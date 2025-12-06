@@ -1,0 +1,706 @@
+<meta name='viewport' content='width=device-width, initial-scale=1'/><!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>P2P Chat — Single File (Auth, Avatars, Rooms, PM, Images, Voice)</title>
+
+<style>
+  :root{
+    --bg:#0f1113; --panel:#151718; --accent:#3dbbff; --accent2:#6ee7b7;
+    --muted:#9aa3a8; --danger:#ff6b6b;
+  }
+  html,body{height:100%;margin:0;background:linear-gradient(180deg,#081018,#0a0c0d);font-family:Inter,system-ui,Roboto,Arial;color:#e6eef3}
+  .app{max-width:980px;margin:0 auto;height:100vh;display:flex;align-items:stretch;justify-content:center;padding:8px;box-sizing:border-box}
+  /* Mobile-first single-column layout */
+  .container{width:100%;max-width:520px;background:var(--panel);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px;box-shadow:0 10px 40px rgba(0,0,0,.6);height:100%}
+  header{display:flex;align-items:center;gap:10px}
+  .brand{font-weight:700;font-size:1.1rem}
+  .subtitle{opacity:.7;font-size:.85rem}
+
+  /* Auth panel */
+  #authPanel{display:flex;flex-direction:column;gap:8px;padding:8px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);border-radius:10px}
+  input,select{padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit;font-size:16px}
+  button{padding:12px 14px;border-radius:10px;border:none;background:linear-gradient(90deg,var(--accent),#5b9df0);color:#051023;font-weight:700;font-size:16px}
+  .link-btn{background:transparent;color:var(--accent);font-weight:600;border:none;padding:6px;text-align:left}
+
+  /* chat layout */
+  .roomSelect{display:flex;gap:8px}
+  #roomsList{flex:1}
+  .main{display:flex;flex-direction:column;flex:1;min-height:0} /* important for mobile vh scrolling */
+  .topBar{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .panels{display:flex;gap:8px;height:100%}
+  .leftCol{flex:1;display:flex;flex-direction:column;min-height:0}
+  .rightCol{width:120px;min-width:110px;background:rgba(255,255,255,0.02);padding:8px;border-radius:10px;display:flex;flex-direction:column;gap:8px}
+  #usersList{display:flex;flex-direction:column;gap:6px;overflow:auto;padding-right:6px}
+
+  /* messages */
+  #msgs{flex:1;overflow:auto;padding:10px;background:linear-gradient(180deg,rgba(255,255,255,0.01),transparent);border-radius:8px;min-height:0}
+  .msg{margin-bottom:10px;padding:8px;border-radius:10px;background:rgba(255,255,255,0.02);display:flex;gap:8px;align-items:flex-start}
+  .msg .avatar{width:44px;height:44px;border-radius:8px;flex-shrink:0;background:#222;background-size:cover;background-position:center}
+  .msg .body{flex:1}
+  .msg .meta{font-size:12px;opacity:.6;margin-bottom:6px}
+  .msg.system{justify-content:center;background:transparent;color:var(--muted);font-style:italic}
+  .msg.me{background:linear-gradient(90deg,rgba(35,120,255,0.18),rgba(60,200,200,0.06))}
+
+  /* input area */
+  .composer{display:flex;gap:8px;align-items:center;padding-top:6px}
+  .composer input[type="text"]{flex:1;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);background:transparent;color:inherit}
+  .composer .bigBtn{padding:12px;border-radius:10px;background:var(--accent);border:none;color:#021529;font-weight:700;font-size:16px}
+  .smallBtn{padding:8px;border-radius:8px;background:rgba(255,255,255,0.03);border:none;color:var(--muted)}
+  .fileInput{display:none}
+  .avatarPreview{width:40px;height:40px;border-radius:10px;background-size:cover;background-position:center;border:2px solid rgba(255,255,255,0.04)}
+
+  /* user item */
+  .userItem{display:flex;gap:8px;align-items:center;padding:6px;border-radius:8px}
+  .userItem .uAvatar{width:36px;height:36px;border-radius:8px;background-size:cover;background-position:center}
+  .statusDot{width:10px;height:10px;border-radius:50%}
+
+  /* responsive tweaks */
+  @media(min-width:900px){
+    .panels{flex-direction:row}
+    .rightCol{width:220px}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="container" role="application">
+    <header>
+      <div>
+        <div class="brand">P2P Chat</div>
+        <div class="subtitle">Авторизация, комнаты, PM, файлы и голос</div>
+      </div>
+    </header>
+
+    <!-- AUTH -->
+    <div id="authPanel" aria-live="polite">
+      <div style="display:flex;gap:8px;align-items:center">
+        <div style="flex:1">
+          <input id="login" placeholder="Логин (ник)" autocapitalize="off" />
+        </div>
+        <div style="width:110px">
+          <input id="password" placeholder="Пароль" type="password" />
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center">
+        <button id="btnAuth" class="bigBtn">Войти</button>
+        <button id="btnToggleReg" class="link-btn">Регистрация</button>
+        <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+          <div id="avatarPreview" class="avatarPreview" title="Аватар"></div>
+          <input id="avatarFile" class="fileInput" type="file" accept="image/*" />
+          <button id="btnAvatar" class="smallBtn">Загрузить аватар</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="presetAvatar" style="flex:1">
+          <option value="">Выбрать аватар (опционально)</option>
+          <option value="https://i.imgur.com/1Q0vXgD.png">Рыцарь</option>
+          <option value="https://i.imgur.com/pR8Y9qe.png">Колдун</option>
+          <option value="https://i.imgur.com/8w4Y1Hz.png">Лучник</option>
+          <option value="https://i.imgur.com/7VJ7u8Z.png">Вор</option>
+        </select>
+        <div style="width:110px;text-align:right;color:var(--muted);font-size:13px" id="authMsg"></div>
+      </div>
+    </div>
+
+    <!-- MAIN APP -->
+    <div id="mainApp" style="display:none" class="main">
+      <div class="topBar">
+        <div style="display:flex;gap:8px;align-items:center;width:100%">
+          <div class="roomSelect" style="flex:1">
+            <select id="roomsList" style="flex:1"></select>
+            <input id="newRoom" placeholder="Новая комната" style="width:140px;border-radius:8px;padding:8px" />
+            <button id="btnCreateRoom" class="smallBtn">Создать</button>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <div id="meLabel" style="font-size:13px;opacity:.9"></div>
+            <button id="btnLogout" class="smallBtn">Выйти</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panels">
+        <div class="leftCol">
+          <div id="msgs" aria-live="polite"></div>
+
+          <div style="display:flex;gap:8px;align-items:center" class="composer">
+            <input id="inputMsg" type="text" placeholder="Сообщение..." />
+            <label for="fileImg" class="smallBtn" style="cursor:pointer">📷</label>
+            <input id="fileImg" class="fileInput" type="file" accept="image/*" />
+            <button id="voiceBtn" class="smallBtn">🎙</button>
+            <button id="btnSend" class="bigBtn">Отправить</button>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-top:6px;align-items:center">
+            <input id="pmTo" placeholder="PM кому (ник)" style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.03)" />
+            <div style="font-size:12px;color:var(--muted)">Если поле заполнено — сообщение станет личным</div>
+          </div>
+        </div>
+
+        <div class="rightCol">
+          <div style="font-weight:700">Онлайн</div>
+          <div id="usersList" aria-live="polite"></div>
+          <div style="margin-top:auto;font-size:12px;color:var(--muted)">Peers: <span id="peersCount">0</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Libs -->
+<script src="https://cdn.jsdelivr.net/npm/simple-peer@9/simplepeer.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/webtorrent-tracker/client.min.js"></script>
+
+<script>
+/* =========================
+   Helpers
+   ========================= */
+// SHA-256 hash for passwords
+async function sha256(str){
+  const buf = new TextEncoder().encode(str);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function el(id){ return document.getElementById(id); }
+function now(){ return Date.now(); }
+function uid(len=8){ return Math.random().toString(36).slice(2,2+len); }
+
+/* =========================
+   Storage keys
+   ========================= */
+const USERS_KEY = 'p2p_chat_users_v1';
+const PROFILE_KEY = 'p2p_chat_profile_v1';
+const HISTORY_KEY_PREFIX = 'p2p_chat_history_'; // + roomName
+
+/* =========================
+   App state
+   ========================= */
+let me = { login:null, avatar:null, clientId: uid(10) };
+let peers = []; // array of SimplePeer instances
+let peerInfos = {}; // clientId -> {name, avatar, lastSeen, clientId}
+let currentRoom = 'lobby';
+let trackerClient = null;
+
+/* =========================
+   UI refs
+   ========================= */
+const loginInput = el('login'), passInput = el('password'), btnAuth = el('btnAuth'), btnToggleReg = el('btnToggleReg');
+const avatarPreview = el('avatarPreview'), avatarFile = el('avatarFile'), btnAvatar = el('btnAvatar'), presetAvatar = el('presetAvatar');
+const authMsg = el('authMsg');
+const authPanel = el('authPanel'), mainApp = el('mainApp');
+const roomsList = el('roomsList'), btnCreateRoom = el('btnCreateRoom'), newRoomInput = el('newRoom');
+const meLabel = el('meLabel'), btnLogout = el('btnLogout');
+const msgsDiv = el('msgs'), inputMsg = el('inputMsg'), btnSend = el('btnSend'), pmToInput = el('pmTo');
+const usersList = el('usersList'), peersCount = el('peersCount');
+const fileImgInput = el('fileImg'), voiceBtn = el('voiceBtn');
+const fileAvatarInput = avatarFile;
+
+/* =========================
+   AUTH: registration & login
+   ========================= */
+btnToggleReg.addEventListener('click', ()=>{
+  if(btnAuth.innerText === 'Войти'){
+    btnAuth.innerText = 'Создать аккаунт';
+    btnToggleReg.innerText = 'У меня есть аккаунт';
+    authMsg.innerText='';
+  } else {
+    btnAuth.innerText = 'Войти';
+    btnToggleReg.innerText = 'Регистрация';
+    authMsg.innerText='';
+  }
+});
+
+// Load saved profile if exists
+const savedProfile = localStorage.getItem(PROFILE_KEY);
+if(savedProfile){
+  try{
+    const p = JSON.parse(savedProfile);
+    if(p && p.login){ me.login = p.login; me.avatar = p.avatar || null; }
+    loginInput.value = me.login || '';
+    if(me.avatar) { avatarPreview.style.backgroundImage = `url(${me.avatar})`; }
+  }catch(e){}
+}
+
+// avatar upload handler
+btnAvatar.addEventListener('click', ()=> fileAvatarInput.click());
+fileAvatarInput.addEventListener('change', async (e)=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  const data = await fileToDataURL(f);
+  me.avatar = data;
+  avatarPreview.style.backgroundImage = `url(${data})`;
+  // store locally if logged in
+  if(me.login) saveProfile();
+});
+
+// preset avatar selection
+presetAvatar.addEventListener('change', ()=>{
+  const v = presetAvatar.value;
+  if(v){
+    me.avatar = v;
+    avatarPreview.style.backgroundImage = `url(${v})`;
+    if(me.login) saveProfile();
+  }
+});
+
+// auth button
+btnAuth.addEventListener('click', async ()=>{
+  const login = loginInput.value.trim();
+  const pass = passInput.value;
+  if(!login || !pass){ authMsg.style.color='var(--danger)'; authMsg.innerText='Заполните логин и пароль'; return; }
+
+  const users = JSON.parse(localStorage.getItem(USERS_KEY) || '{}');
+
+  if(btnAuth.innerText === 'Создать аккаунт'){
+    // registration
+    if(users[login]){ authMsg.style.color='var(--danger)'; authMsg.innerText='Логин занят'; return; }
+    const h = await sha256(pass);
+    users[login] = { pass: h, avatar: me.avatar || null, created: now() };
+    localStorage.setItem(USERS_KEY, JSON.stringify(users));
+    authMsg.style.color='var(--accent2)'; authMsg.innerText='Аккаунт создан — войдите';
+    btnAuth.innerText='Войти'; btnToggleReg.innerText='Регистрация';
+    return;
+  } else {
+    // login
+    const usr = users[login];
+    if(!usr){ authMsg.style.color='var(--danger)'; authMsg.innerText='Пользователь не найден'; return; }
+    const h = await sha256(pass);
+    if(h !== usr.pass){ authMsg.style.color='var(--danger)'; authMsg.innerText='Неверный пароль'; return; }
+    // success
+    me.login = login;
+    me.avatar = me.avatar || usr.avatar || null;
+    authMsg.innerText='';
+    saveProfile();
+    enterApp();
+  }
+});
+
+// save profile locally
+function saveProfile(){
+  const p = { login: me.login, avatar: me.avatar, clientId: me.clientId };
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
+}
+
+/* =========================
+   Rooms management
+   ========================= */
+const defaultRooms = ['lobby','general','trading','support'];
+function loadRooms(){
+  const localRooms = JSON.parse(localStorage.getItem('p2p_rooms_v1') || '[]');
+  const rooms = Array.from(new Set([...defaultRooms,...localRooms]));
+  roomsList.innerHTML = '';
+  rooms.forEach(r=>{
+    const opt = document.createElement('option'); opt.value=r; opt.textContent=r; roomsList.appendChild(opt);
+  });
+  // set current
+  if(!rooms.includes(currentRoom)) currentRoom = rooms[0];
+  roomsList.value = currentRoom;
+}
+loadRooms();
+
+btnCreateRoom.addEventListener('click', ()=>{
+  const name = newRoomInput.value.trim();
+  if(!name) return;
+  const existing = JSON.parse(localStorage.getItem('p2p_rooms_v1')||'[]');
+  if(!existing.includes(name)) existing.push(name);
+  localStorage.setItem('p2p_rooms_v1', JSON.stringify(existing));
+  loadRooms();
+  newRoomInput.value='';
+});
+
+roomsList.addEventListener('change', ()=>{
+  const newRoom = roomsList.value;
+  if(newRoom === currentRoom) return;
+  // leave previous room: send presence leave
+  sendPresence('leave');
+  currentRoom = newRoom;
+  // load local history for new room and announce join
+  loadHistoryToUI();
+  sendPresence('join');
+});
+
+/* =========================
+   Messaging history (local)
+   ========================= */
+function historyKey(room){ return HISTORY_KEY_PREFIX + room; }
+function saveMessageToHistory(room,msg){
+  try{
+    const key = historyKey(room);
+    const arr = JSON.parse(localStorage.getItem(key) || '[]');
+    arr.push(msg);
+    // limit history length
+    if(arr.length > 400) arr.splice(0, arr.length - 400);
+    localStorage.setItem(key, JSON.stringify(arr));
+  }catch(e){ console.warn('hist save', e); }
+}
+function loadHistoryToUI(){
+  msgsDiv.innerHTML = '';
+  try{
+    const arr = JSON.parse(localStorage.getItem(historyKey(currentRoom)) || '[]');
+    arr.forEach(m=> renderMsg(m));
+  }catch(e){}
+}
+
+/* =========================
+   UI: render message
+   ========================= */
+function renderMsg(msg){
+  // msg: {id, type, room, from, to, avatar, time, txt, fileType, dataUrl}
+  if(msg.room && msg.room !== currentRoom) return; // don't render for other rooms
+
+  // system message
+  if(msg.type === 'system'){
+    const d = document.createElement('div'); d.className='msg system'; d.textContent = msg.txt; msgsDiv.appendChild(d); msgsDiv.scrollTop = msgsDiv.scrollHeight; return;
+  }
+
+  // PM: show only sender/recipient/private
+  if(msg.type === 'chat' && msg.to){
+    if(msg.to !== me.login && msg.from !== me.login) return;
+  }
+
+  const wrap = document.createElement('div');
+  wrap.className = 'msg' + (msg.from === me.login ? ' me' : '');
+  const avatar = document.createElement('div'); avatar.className='avatar';
+  avatar.style.backgroundImage = `url(${msg.avatar || 'https://i.imgur.com/1Q0vXgD.png'})`;
+
+  const body = document.createElement('div'); body.className='body';
+  const meta = document.createElement('div'); meta.className='meta';
+  const timeStr = new Date(msg.time||now()).toLocaleTimeString();
+  meta.textContent = `${msg.from}${msg.to ? ' → ' + msg.to : ''} • ${timeStr}`;
+
+  const content = document.createElement('div');
+  // text
+  if(msg.txt) {
+    const p = document.createElement('div'); p.textContent = msg.txt; content.appendChild(p);
+  }
+  // file: image
+  if(msg.fileType && msg.fileType.startsWith('image/')){
+    const img = document.createElement('img'); img.src = msg.dataUrl; img.style.maxWidth='220px'; img.style.borderRadius='8px'; img.style.marginTop='6px';
+    img.addEventListener('click', ()=> window.open(msg.dataUrl, '_blank'));
+    content.appendChild(img);
+  }
+  // voice
+  if(msg.fileType && msg.fileType.startsWith('audio/')){
+    const btn = document.createElement('button'); btn.className='smallBtn'; btn.textContent='▶️ Прослушать голос';
+    btn.addEventListener('click', ()=>{
+      const a = new Audio(msg.dataUrl); a.play();
+    });
+    content.appendChild(btn);
+  }
+
+  body.appendChild(meta); body.appendChild(content);
+  wrap.appendChild(avatar); wrap.appendChild(body);
+  msgsDiv.appendChild(wrap);
+  msgsDiv.scrollTop = msgsDiv.scrollHeight;
+}
+
+/* =========================
+   P2P: init tracker & peers
+   ========================= */
+function roomInfoHash(room){
+  // derive stable id per room
+  return 'room_' + room.replace(/\s+/g,'_').toLowerCase();
+}
+
+/* Create and configure tracker client */
+function startTrackerForRoom(room){
+  // cleanup prev client & peers
+  closeAllPeers();
+  peerInfos = {}; peers = []; updateUsersUI();
+
+  const infoHash = roomInfoHash(room) + '_v1';
+  trackerClient = new WebTorrentTracker.Client({
+    infoHash,
+    // public trackers
+    announce: [
+      "wss://tracker.openwebtorrent.com",
+      "wss://tracker.btorrent.xyz",
+      "wss://tracker.fastcast.nz"
+    ]
+  });
+
+  // on discovering a tracker peer
+  trackerClient.on('peer', async (peer) => {
+    // create initiator peer for outgoing connection
+    const p = new SimplePeer({ initiator: true, trickle: false });
+
+    // when SimplePeer generates sdp, forward to tracker peer
+    p.on('signal', data => {
+      try{ peer.send(JSON.stringify({ sdp: data, meta:{clientId:me.clientId, room:currentRoom} })); }catch(e){}
+    });
+
+    // when tracker peer sends us data (theirs sdp), feed to SimplePeer to establish connection
+    peer.on('data', (data) => {
+      try{
+        const d = JSON.parse(data);
+        if(d.sdp) p.signal(d.sdp);
+      }catch(e){}
+    });
+
+    setupPeerEvents(p);
+  });
+
+  // when some other peer sends us signalling via tracker (incoming initiation)
+  trackerClient.on('data', (peer, data) => {
+    try{
+      const d = JSON.parse(data);
+      const p = new SimplePeer({ initiator: false, trickle: false });
+      // feed remote sdp
+      if(d.sdp) p.signal(d.sdp);
+      // when p generates sdp, send back through tracker peer
+      p.on('signal', sdp => {
+        try{ peer.send(JSON.stringify({ sdp, meta:{clientId:me.clientId, room:currentRoom} })); }catch(e){}
+      });
+      setupPeerEvents(p);
+    }catch(e){}
+  });
+
+  // request peers from trackers
+  trackerClient.scrape();
+}
+
+/* Setup events for SimplePeer instance */
+function setupPeerEvents(p){
+  p.on('connect', ()=>{
+    peers.push(p);
+    peersCount.textContent = String(peers.length);
+    // send presence announcement with profile
+    sendPresence('join');
+  });
+
+  p.on('data', (d)=>{
+    // data is Uint8Array -> try to text decode
+    try{
+      const str = (typeof d === 'string') ? d : new TextDecoder().decode(d);
+      const obj = JSON.parse(str);
+      handlePeerMessage(obj);
+    }catch(e){
+      console.warn('invalid data', e);
+    }
+  });
+
+  p.on('close', ()=>{
+    // remove p from peers
+    peers = peers.filter(x=>x!==p);
+    peersCount.textContent = String(peers.length);
+  });
+
+  p.on('error', (err)=> console.warn('peer err', err));
+}
+
+/* Broadcast an object to all peers (as JSON) */
+function broadcast(obj){
+  const s = JSON.stringify(obj);
+  peers.forEach(p=>{
+    try{ p.send(s); }catch(e){}
+  });
+}
+
+/* Gracefully close all peers */
+function closeAllPeers(){
+  if(peers && peers.length){
+    peers.forEach(p=>{ try{ p.destroy(); }catch(e){} });
+  }
+  peers = []; peerInfos = {}; updateUsersUI(); peersCount.textContent='0';
+  if(trackerClient){ try{ trackerClient.close(); }catch(e){} trackerClient = null; }
+}
+
+/* =========================
+   Handle incoming peer messages
+   ========================= */
+function handlePeerMessage(obj){
+  if(!obj || !obj.type) return;
+  // types: presence, chat, file, requestHistory, historyResponse
+  if(obj.type === 'presence'){
+    // update peer info
+    const id = obj.clientId;
+    if(!id) return;
+    peerInfos[id] = { name: obj.name, avatar: obj.avatar, lastSeen: now(), clientId:id };
+    updateUsersUI();
+  } else if(obj.type === 'chat'){
+    // store and render; filter by room and pm
+    if(obj.room !== currentRoom) return; // ignore other rooms
+    const msg = { id: obj.id || uid(10), type:'chat', room: obj.room, from: obj.from, to: obj.to || null, avatar: obj.avatar, time: obj.time || now(), txt: obj.txt || null, fileType: obj.fileType || null, dataUrl: obj.dataUrl || null };
+    saveMessageToHistory(currentRoom, msg);
+    renderMsg(msg);
+  } else if(obj.type === 'file'){ // legacy: same as chat with file fields
+    if(obj.room !== currentRoom) return;
+    const msg = { id: uid(10), type:'chat', room: obj.room, from: obj.from, to: obj.to||null, avatar: obj.avatar, time: obj.time||now(), fileType: obj.fileType, dataUrl: obj.dataUrl };
+    saveMessageToHistory(currentRoom, msg);
+    renderMsg(msg);
+  } else if(obj.type === 'requestHistory'){
+    // send our local history for requested room (limited)
+    const hist = JSON.parse(localStorage.getItem(historyKey(obj.room)) || '[]').slice(-200);
+    const payload = { type:'historyResponse', room: obj.room, toClient: obj.fromClient, from: me.clientId, history: hist };
+    // send only to each peer (broadcast; recipient will filter by toClient)
+    broadcast(payload);
+  } else if(obj.type === 'historyResponse'){
+    // only accept if intended to us
+    if(obj.toClient !== me.clientId) return;
+    if(obj.room !== currentRoom) return;
+    // merge history
+    const arr = obj.history || [];
+    arr.forEach(m=> { saveMessageToHistory(currentRoom, m); });
+    loadHistoryToUI();
+  } else if(obj.type === 'system'){
+    // show system message
+    const sm = { type:'system', txt: obj.txt, time: obj.time || now(), room: currentRoom };
+    renderMsg(sm);
+  }
+}
+
+/* =========================
+   Presence: announce join/leave periodically
+   ========================= */
+let presenceTimer = null;
+function sendPresence(action='join'){
+  const p = { type:'presence', name: me.login, avatar: me.avatar, clientId: me.clientId, action, room: currentRoom, time: now() };
+  broadcast(p);
+  // locally register ourselves
+  peerInfos[me.clientId] = { name: me.login, avatar: me.avatar, lastSeen: now(), clientId: me.clientId };
+  updateUsersUI();
+  // start periodic presence
+  if(!presenceTimer){
+    presenceTimer = setInterval(()=> broadcast({ type:'presence', name: me.login, avatar: me.avatar, clientId: me.clientId, action:'alive', room: currentRoom, time: now() }), 10000);
+  }
+}
+
+/* =========================
+   UI: users list & peers
+   ========================= */
+function updateUsersUI(){
+  usersList.innerHTML = '';
+  // convert map to array sorted by lastSeen desc
+  const list = Object.values(peerInfos).sort((a,b)=> (b.lastSeen||0)-(a.lastSeen||0));
+  list.forEach(u=>{
+    const div = document.createElement('div'); div.className='userItem';
+    const ava = document.createElement('div'); ava.className='uAvatar'; ava.style.backgroundImage = `url(${u.avatar||'https://i.imgur.com/1Q0vXgD.png'})`;
+    const name = document.createElement('div'); name.textContent = u.name;
+    const dot = document.createElement('div'); dot.className='statusDot'; dot.style.background = ( (now() - (u.lastSeen||0)) < 25000 ? 'lime' : 'gray' );
+    div.appendChild(ava); div.appendChild(name); div.appendChild(dot);
+    usersList.appendChild(div);
+  });
+}
+
+/* =========================
+   Sending messages (text / image / voice)
+   ========================= */
+btnSend.addEventListener('click', sendMessage);
+inputMsg.addEventListener('keydown', e=>{ if(e.key==='Enter') sendMessage(); });
+
+async function sendMessage(){
+  const txt = inputMsg.value.trim();
+  const to = pmToInput.value.trim() || null; // PM recipient
+  if(!txt) return;
+  const msgObj = { type:'chat', id:uid(10), room: currentRoom, from: me.login, to, avatar: me.avatar, time: now(), txt };
+  // save locally
+  saveMessageToHistory(currentRoom, msgObj);
+  renderMsg(msgObj);
+  // send to peers
+  broadcast(msgObj);
+  inputMsg.value='';
+}
+
+/* Image sending */
+fileImgInput.addEventListener('change', async (e)=>{
+  const f = e.target.files[0]; if(!f) return;
+  // convert to dataURL, warn if big
+  if(f.size > 2_200_000){ if(!confirm('Файл большой ('+Math.round(f.size/1024)+'KB). Отправить?')) return; }
+  const dataUrl = await fileToDataURL(f);
+  const to = pmToInput.value.trim() || null;
+  const payload = { type:'chat', id:uid(10), room: currentRoom, from: me.login, to, avatar: me.avatar, time: now(), fileType: f.type, dataUrl };
+  saveMessageToHistory(currentRoom, payload); renderMsg(payload);
+  broadcast(payload);
+  fileImgInput.value='';
+});
+
+/* Voice recording */
+let mediaRecorder = null;
+let audioChunks = [];
+voiceBtn.addEventListener('click', async ()=>{
+  if(mediaRecorder && mediaRecorder.state === 'recording'){
+    mediaRecorder.stop(); voiceBtn.textContent='🎙';
+    return;
+  }
+  // start recording
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.onstop = async ()=>{
+      const blob = new Blob(audioChunks, { type: 'audio/webm' });
+      const dataUrl = await fileToDataURL(blob);
+      const to = pmToInput.value.trim() || null;
+      const payload = { type:'chat', id:uid(10), room: currentRoom, from: me.login, to, avatar: me.avatar, time: now(), fileType: blob.type, dataUrl };
+      saveMessageToHistory(currentRoom, payload); renderMsg(payload);
+      broadcast(payload);
+    };
+    mediaRecorder.start();
+    voiceBtn.textContent='■ Остановить';
+  }catch(e){ alert('Ошибка записи: '+e.message); }
+});
+
+/* utility: file -> dataURL */
+function fileToDataURL(file){
+  return new Promise((res,rej)=>{
+    const r = new FileReader();
+    r.onload = ()=> res(r.result);
+    r.onerror = ()=> rej(r.error);
+    r.readAsDataURL(file);
+  });
+}
+
+/* =========================
+   History sync: request from peers on join
+   ========================= */
+function requestHistoryFromPeers(){
+  const req = { type:'requestHistory', room: currentRoom, fromClient: me.clientId, time: now() };
+  broadcast(req);
+}
+
+/* =========================
+   Entry point after login
+   ========================= */
+function enterApp(){
+  authPanel.style.display='none';
+  mainApp.style.display='flex';
+  meLabel.textContent = me.login;
+  if(me.avatar) avatarPreview.style.backgroundImage = `url(${me.avatar})`;
+  loadRooms();
+  loadHistoryToUI();
+  // start tracker for room
+  startTrackerForRoom(currentRoom);
+  // small delay and request history
+  setTimeout(()=> requestHistoryFromPeers(), 1500);
+}
+
+/* =========================
+   Logout
+   ========================= */
+btnLogout.addEventListener('click', ()=>{
+  if(!confirm('Выйти?')) return;
+  closeAllPeers();
+  localStorage.removeItem(PROFILE_KEY);
+  location.reload();
+});
+
+/* =========================
+   On load: if have profile -> prefill
+   ========================= */
+(function init(){
+  const Prof = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
+  if(Prof && Prof.login){
+    loginInput.value = Prof.login;
+    me.login = Prof.login;
+    me.avatar = Prof.avatar || null;
+    avatarPreview.style.backgroundImage = me.avatar ? `url(${me.avatar})` : '';
+  }
+})();
+
+</script>
+</body>
+</html>
